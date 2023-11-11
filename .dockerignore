@@ -1,0 +1,6 @@
+data/preperation
+.git
+.dockerignore
+.env
+.python-version
+venv
