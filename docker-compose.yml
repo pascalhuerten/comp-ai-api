@@ -12,7 +12,7 @@ services:
     build:
       context: .
       dockerfile: Dockerfile
-    image: pascalhuerten/comp-ai-api:v2.0.0
+    image: pascalhuerten/comp-ai-api:latest
     pull_policy: always
     restart: always
     volumes:
