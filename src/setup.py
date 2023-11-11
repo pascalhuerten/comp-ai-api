@@ -43,6 +43,6 @@ def setup():
     }
     skillfit_model = load_skillfit_model()
 
-    # db = storage()
+    db = storage()
 
-    return embedding, skilldbs, skillfit_model, None
+    return embedding, skilldbs, skillfit_model, db
