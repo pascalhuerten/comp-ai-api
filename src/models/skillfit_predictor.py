@@ -17,9 +17,7 @@ class skillfit_predictor:
 
     def prepare_data_for_prediction(self, embedding, embedded_doc, skill_data):
         # Extract skill embeddings and similarity scores
-        skill_embeddings = [
-            embedding.embed_documents([item["title"]])[0] for item in skill_data
-        ]
+        skill_embeddings = embedding.embed_documents([item["title"] for item in skill_data])
         similarity_scores = [item["score"] for item in skill_data]
 
         # Convert to numpy arrays

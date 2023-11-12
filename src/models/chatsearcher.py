@@ -45,9 +45,7 @@ class chatsearcher:
             learningoutcomes = self.doc
             searchterms = []
 
-        learningoutcomes = (
-            "\n".join(self.valid_skill_labels) + "\n" + learningoutcomes
-        )
+        learningoutcomes = "\n".join(self.valid_skill_labels) + "\n" + learningoutcomes
         searchterms.extend(self.valid_skill_labels)
         embedded_doc = self.embedding.embed_documents([learningoutcomes])
 
@@ -78,6 +76,9 @@ class chatsearcher:
 
         print(str(len(predictions)) + "  after duplicate filter.")
 
+        # Reduce amount of predictions before performance hungry validation.
+        predictions = predictions[: int(self.top_k * 1.3)]
+
         # Validate predictions.
         if self.llm_validation:
             predictions = self.validate_with_llm(predictions)
@@ -89,18 +90,26 @@ class chatsearcher:
         # Sort predictions by score.
         predictions = sorted(predictions, key=lambda x: x["score"], reverse=False)
 
+        # Remove predictions with a score lower than the score_cutoff.
+        if self.score_cutoff > 0 and self.score_cutoff < 1:
+            predictions = [
+                prediction
+                for prediction in predictions
+                if prediction["score"] < self.score_cutoff
+            ]
+
         # Clean up predictions.
         for prediction in predictions:
             if "broaderConcepts" in prediction:
                 del prediction["broaderConcepts"]
             if "penalty" in prediction:
                 del prediction["penalty"]
-            if "fit" in prediction and not self.llm_validation and not self.skillfit_validation:
+            if (
+                "fit" in prediction
+                and not self.llm_validation
+                and not self.skillfit_validation
+            ):
                 del prediction["fit"]
-        
-        # Remove predictions with a score lower than the score_cutoff.
-        if self.score_cutoff > 0 and self.score_cutoff < 1:
-            predictions = [prediction for prediction in predictions if prediction["score"] < self.score_cutoff]
 
         # Return predictions.
         return searchterms, predictions[: self.top_k]
@@ -338,8 +347,9 @@ class chatsearcher:
         return predictions
 
     def finetune_on_validated_skills(self, predictions):
+        if len(self.validated_skills) == 0:
+            return predictions
         # Predictions based on validated skills.
-
         validSkillUris = [
             skill["uri"] for skill in self.validated_skills if skill["valid"]
         ]
