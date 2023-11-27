@@ -51,30 +51,22 @@ class chatsearcher:
 
         # Do Vector Search to find most similar skills.
         similar_skills = self.skilldb.similarity_search_with_score(
-            learningoutcomes, min(self.top_k * 2, 50)
+            learningoutcomes, min(self.top_k * 2, 50) + len(self.validated_skills)
         )
 
         predictions = [
             self.create_prediction(skill[0], skill[1]) for skill in similar_skills
         ]
 
-        print("Found " + str(len(predictions)) + " similar skills.")
-
         # Filter out skills that are already known or not part of the filterconcepts.
         predictions = self.filter_predictions(predictions)
-
-        print("Found " + str(len(predictions)) + " skills after filter.")
 
         # Define artificial threshholds for relevancy by identifying where the similarity rating decreases the fastest.
         if not self.llm_validation and not self.skillfit_validation:
             predictions = self.applyDynamicThreshold(predictions)
 
-        print(str(len(predictions)) + "  after dynamic threshold.")
-
         # Predictions based on the known skills.
         predictions = self.finetune_on_validated_skills(predictions)
-
-        print(str(len(predictions)) + "  after duplicate filter.")
 
         # Reduce amount of predictions before performance hungry validation.
         predictions = predictions[: int(self.top_k * 1.3)]
@@ -85,12 +77,10 @@ class chatsearcher:
         elif self.skillfit_validation and self.skill_taxonomy == "ESCO":
             predictions = self.validate_with_skillfit(predictions, embedded_doc)
 
-        print(str(len(predictions)) + "  after validation.")
-
         # Sort predictions by score.
         predictions = sorted(predictions, key=lambda x: x["score"], reverse=False)
 
-        # Remove predictions with a score lower than the score_cutoff.
+        # Remove predictions with a score higher than the score_cutoff.
         if self.score_cutoff > 0 and self.score_cutoff < 1:
             predictions = [
                 prediction
@@ -129,7 +119,6 @@ class chatsearcher:
         return validated if (self.strict > 1 and validated) else predictions
 
     def validate_with_llm(self, predictions):
-        print("Validating search predictions using LLM-Chat")
         skilllabels = [prediction["title"] for prediction in predictions]
 
         system = "Es soll geprüft werden welche Lernziele von dem folgenden Kurs vermittelt werden. \nKursbeschreibung: "
@@ -140,7 +129,6 @@ class chatsearcher:
         user += "\n\n".join(skilllabels)
         user += "\n\nDie Kompetenzen, die nicht zur Kursbeschreibung passen, sind:"
         if self.openai_api_key:
-            print("Using OpenAI API")
             client = OpenAI()
 
             completion = client.chat.completions.create(
@@ -154,7 +142,6 @@ class chatsearcher:
 
             chatresponse = completion.choices[0].message.content
         else:
-            print("Using THL-LLM")
             prompt = system + "\n\n" + user
             llm = HuggingFaceTextGenInference(
                 inference_server_url="https://em-german-70b.llm.mylab.th-luebeck.dev/",
@@ -172,13 +159,9 @@ class chatsearcher:
         ]
         # remove empty lines
         lines = [line for line in lines if line]
-        print("LLM Validation response: " + chatresponse)
-        print("lines: ")
-        print(lines)
         return self.apply_llm_validation(predictions, lines)
 
     def validate_with_skillfit(self, predictions, embedded_doc):
-        print("Validating search predictions using Skillfit-Model")
         skillfit_predictions = self.skillfit_model.predict(
             self.skillfit_model.prepare_data_for_prediction(
                 self.embedding, embedded_doc, predictions
@@ -200,12 +183,14 @@ class chatsearcher:
                 penalty = -0.05
             else:
                 penalty = 0.05
+            
             if self.strict > 0:
                 predictions[i]["penalty"] += penalty
                 predictions[i]["score"] += penalty
-            if self.strict > 1:
+            if self.strict > 1 and fit:
                 validated.append(predictions[i])
-        return validated if (self.strict > 1 and validated) else predictions
+        
+        return validated if (self.strict > 1) else predictions
 
     def filter_predictions(self, predictions):
         seen = set()
@@ -221,14 +206,12 @@ class chatsearcher:
         return filtered
 
     def extract_learning_outcomes(self, doc):
-        print("Extracting los from doc using llm")
         system = "Du bist ein KI-Assistent, der auf Kursbeschreibungen spezialisiert ist. Deine Aufgabe ist es, eine Liste von Lernzielen aus einer gegebenen Kursbeschreibung zu extrahieren. Benannte Vorraussetzunge und Zielgruppen sollen ignoriert werden. Gehe dabei Schritt für Schritt vor. Erfasse zuerst die groben Themen, dann identifiziere zu jedem Thema die vermittelten Fähigkeiten."
         user = "Bitte identifiziere die Lernziele in der folgenden Kursbeschreibung:"
         user += "\n\n" + doc
         user += "\n\nErstelle eine Liste der Lernziele, wobei jedes Lernziel in einer neuen Zeile stehen soll. Die Antwort sollte nur die Lernziele selbst enthalten, ohne Einleitungen oder zusätzliche Worte. Nutze kurze und einfache Sprache sowie BLOOM-Verben für Fähigkeiten."
 
         if self.openai_api_key:
-            print("Using OpenAI API")
             client = OpenAI()
 
             completion = client.chat.completions.create(
@@ -242,7 +225,6 @@ class chatsearcher:
 
             learningoutcomes = completion.choices[0].message.content
         else:
-            print("Using THL-LLM")
             prompt = system + "\n\n" + user
             max_tokens = 4000
             max_new_tokens = 512
