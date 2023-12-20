@@ -1,8 +1,10 @@
 import json
-from langchain.llms import HuggingFaceTextGenInference
 from sklearn.metrics.pairwise import cosine_similarity
 import re
 from openai import OpenAI
+from mistralai.client import MistralClient
+from mistralai.models.chat_completion import ChatMessage
+from langchain.llms import HuggingFaceTextGenInference
 
 
 class chatsearcher:
@@ -27,11 +29,12 @@ class chatsearcher:
         self.top_k = int(data.get("top_k", 20))
         self.strict = int(data.get("strict", 0))
         self.trusted_score = float(data.get("trusted_score", 0.2))
-        self.temperature = float(data.get("temperature", 0.05))
+        self.temperature = float(data.get("temperature", 0.1))
         self.use_llm = bool(data.get("use_llm", False))
         self.llm_validation = bool(data.get("llm_validation", False))
         self.skillfit_validation = bool(data.get("skillfit_validation", False))
         self.openai_api_key = data.get("openai_api_key", None)
+        self.mistral_api_key = data.get("mistral_api_key", None)
         self.score_cutoff = data.get("score_cutoff", 0)
 
     def predict(self):
@@ -101,13 +104,32 @@ class chatsearcher:
             ):
                 del prediction["fit"]
 
+        # Calculate entropy based on semantic similarity between the predictions and select a diverse subset.
+        # if self.strict == 3:
+        #     # Calculate similarity matrix.
+        #     similarity_matrix = cosine_similarity(
+        #         self.embedding.embed_documents([prediction["title"] for prediction in predictions])
+        #     )
+        #     # Calculate entropy for each prediction.
+        #     for i in range(len(predictions)):
+        #         entropy = 0
+        #         for j in range(len(predictions)):
+        #             if i == j:
+        #                 continue
+        #             entropy += similarity_matrix[i][j]
+        #         predictions[i]["entropy"] = entropy
+        #     # Sort predictions by entropy.
+        #     predictions = sorted(predictions, key=lambda x: x["entropy"], reverse=True)
+        #     # Select top_k predictions.
+        #     predictions = predictions[: self.top_k]
+
         # Return predictions.
         return searchterms, predictions[: self.top_k]
 
-    def apply_llm_validation(self, predictions, errors):
+    def apply_llm_validation(self, predictions, validskills):
         validated = []
         for i in range(len(predictions)):
-            fit = predictions[i]["title"] not in errors
+            fit = predictions[i]["title"] in validskills
             predictions[i]["fit"] = fit
             if fit:
                 if self.strict > 0:
@@ -118,38 +140,74 @@ class chatsearcher:
                     validated.append(predictions[i])
         return validated if (self.strict > 1 and validated) else predictions
 
-    def validate_with_llm(self, predictions):
-        skilllabels = [prediction["title"] for prediction in predictions]
+    def get_chatresponse(self, system, user, llmsize=0):
+        if self.mistral_api_key:
+            modelname = "mistral-small" if llmsize == 0 else "mistral-medium"
+            client = MistralClient(api_key=self.mistral_api_key)
 
-        system = "Es soll geprüft werden welche Lernziele von dem folgenden Kurs vermittelt werden. \nKursbeschreibung: "
-        user = "Kursbeschreibung: \n" + self.doc[:3500]
-        user += (
-            "\n\n" + "Welche der folgenden Kompetenzen werden nicht im Kurs vermittelt?"
-        )
-        user += "\n\n".join(skilllabels)
-        user += "\n\nDie Kompetenzen, die nicht zur Kursbeschreibung passen, sind:"
-        if self.openai_api_key:
-            client = OpenAI()
+            messages = [
+                ChatMessage(role="system", content=system),
+                ChatMessage(role="user", content=user),
+            ]
+
+            completion = client.chat(
+                model=modelname,
+                messages=messages,
+                max_tokens=512,
+                temperature=self.temperature,
+                random_seed=42,
+            )
+
+            chatresponse = completion.choices[0].message.content
+        elif self.openai_api_key:
+            modelname = "gpt-3.5-turbo-1106" if llmsize == 0 else "gpt-4-1106-preview"
+            client = OpenAI(api_key=self.openai_api_key)
 
             completion = client.chat.completions.create(
-                model="gpt-3.5-turbo-1106",
+                model=modelname,
                 messages=[
                     {"role": "system", "content": system},
                     {"role": "user", "content": user},
                 ],
+                max_tokens=512,
+                temperature=self.temperature,
                 seed=42,
             )
 
             chatresponse = completion.choices[0].message.content
         else:
+            # modelname = (
+            #     "https://em-german-13b.llm.mylab.th-luebeck.dev"
+            #     if llmsize == 0
+            #     else "https://em-german-70b.llm.mylab.th-luebeck.dev"
+            # )
+            modelname = "https://em-german-13b.llm.mylab.th-luebeck.dev"
             prompt = system + "\n\n" + user
             llm = HuggingFaceTextGenInference(
-                inference_server_url="https://em-german-70b.llm.mylab.th-luebeck.dev/",
+                inference_server_url=modelname,
                 max_new_tokens=512,
                 temperature=self.temperature,
+                seed=42,
             )
+
             chatresponse = llm(prompt)
 
+        print("Used LLM: " + modelname)
+        print("LLM response: " + chatresponse)
+
+        return chatresponse
+
+    def validate_with_llm(self, predictions):
+        skilllabels = [prediction["title"] for prediction in predictions]
+
+        system = "Du bist ein Redakteur einer Weiterbildungsplatform. Deine Aufgabe ist es zu prüfen, welche der vorgeschlagenen Kompetenzen zum Kursangebot inhaltlich passen. Berücksichtige dabei folgende Fragestellungen. Passen die Kompetenzen thematisch zu den Lernzielen des Kurses? Sind die Kompetenzen zu allgemein oder zu spezifisch? Sind die Kompetenzen zu umfangreich oder zu einfach?"
+        user = "Kursbeschreibung: \n" + self.doc[:3500]
+        user += "\n\nKompetenzen: \n" + "\n".join(skilllabels)
+        user += "\n\nErzeuge eine Liste auschließlich derer Kompetenzen, die sehr gut zu den Lernzielen des Kurses passen. Behalte dabei den Wortlaut der Kompetenzen bei. Nenne eine Kompetenz pro Zeile. Die Antwort sollte nur die Kompetenzen selbst enthalten, ohne Einleitungen oder zusätzliche Worte."
+
+        chatresponse = self.get_chatresponse(system, user, 1)
+
+        chatresponse = chatresponse.replace("ASSISTANT: ", "").strip()
         lines = chatresponse.split("\n")
         lines = [line.strip() for line in lines]
         # strip 1. 2. etc or - or * from start of line
@@ -183,13 +241,13 @@ class chatsearcher:
                 penalty = -0.05
             else:
                 penalty = 0.05
-            
+
             if self.strict > 0:
                 predictions[i]["penalty"] += penalty
                 predictions[i]["score"] += penalty
             if self.strict > 1 and fit:
                 validated.append(predictions[i])
-        
+
         return validated if (self.strict > 1) else predictions
 
     def filter_predictions(self, predictions):
@@ -206,36 +264,11 @@ class chatsearcher:
         return filtered
 
     def extract_learning_outcomes(self, doc):
-        system = "Du bist ein KI-Assistent, der auf Kursbeschreibungen spezialisiert ist. Deine Aufgabe ist es, eine Liste von Lernzielen aus einer gegebenen Kursbeschreibung zu extrahieren. Benannte Vorraussetzunge und Zielgruppen sollen ignoriert werden. Gehe dabei Schritt für Schritt vor. Erfasse zuerst die groben Themen, dann identifiziere zu jedem Thema die vermittelten Fähigkeiten."
-        user = "Bitte identifiziere die Lernziele in der folgenden Kursbeschreibung:"
-        user += "\n\n" + doc
-        user += "\n\nErstelle eine Liste der Lernziele, wobei jedes Lernziel in einer neuen Zeile stehen soll. Die Antwort sollte nur die Lernziele selbst enthalten, ohne Einleitungen oder zusätzliche Worte. Nutze kurze und einfache Sprache sowie BLOOM-Verben für Fähigkeiten."
+        system = "Du bist ein Redakteur einer Weiterbildungsplatform. Deine Aufgabe ist es, Lernziele von Kursen zu identifizieren. In der Beschreibung benannte Vorraussetzunge und Zielgruppen sollen ignoriert werden. Gehe dabei Schritt für Schritt vor. Erfasse zuerst das grobe Thema des Kurses, dann identifiziere die konkreten Fähigkeiten, die vermittelt werden."
+        user = "\n\nKursbeschreibung: " + doc
+        user += "\n\nBitte identifiziere die Lernziele in der vorangegangenen Kursbeschreibung. Erstelle eine Liste der Lernziele, wobei jedes Lernziel in einer neuen Zeile stehen soll. Die Antwort sollte nur die Lernziele selbst enthalten, ohne Einleitungen oder zusätzliche Worte. Nutze kurze und einfache Sprache sowie BLOOM-Verben für Fähigkeiten."
 
-        if self.openai_api_key:
-            client = OpenAI()
-
-            completion = client.chat.completions.create(
-                model="gpt-3.5-turbo-1106",
-                messages=[
-                    {"role": "system", "content": system},
-                    {"role": "user", "content": user},
-                ],
-                seed=42,
-            )
-
-            learningoutcomes = completion.choices[0].message.content
-        else:
-            prompt = system + "\n\n" + user
-            max_tokens = 4000
-            max_new_tokens = 512
-            max_input_tokens = max_tokens - max_new_tokens
-            prompt = prompt[:max_input_tokens]
-            llm = HuggingFaceTextGenInference(
-                inference_server_url="https://em-german-13b.llm.mylab.th-luebeck.dev",
-                max_new_tokens=max_new_tokens,
-                temperature=self.temperature,
-            )
-            learningoutcomes = llm(prompt)
+        learningoutcomes = self.get_chatresponse(system, user, 0)
 
         # Remove String " ASSISTANT: " from start of learningoutcomes
         learningoutcomes = learningoutcomes.replace("ASSISTANT: ", "").strip()
