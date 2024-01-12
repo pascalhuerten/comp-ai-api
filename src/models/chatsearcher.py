@@ -68,7 +68,7 @@ class chatsearcher:
         if not self.llm_validation and not self.skillfit_validation:
             predictions = self.applyDynamicThreshold(predictions)
 
-        # Predictions based on the known skills.
+        # Finetune predictions based on the known skills.
         predictions = self.finetune_on_validated_skills(predictions)
 
         # Reduce amount of predictions before performance hungry validation.
@@ -82,6 +82,13 @@ class chatsearcher:
 
         # Sort predictions by score.
         predictions = sorted(predictions, key=lambda x: x["score"], reverse=False)
+
+        # Some scores might have become negative due to penalties. Normalize scores.
+        min_score = predictions[0]["score"]
+        if min_score < 0:
+            for prediction in predictions:
+                prediction["score"] -= min_score
+        
 
         # Remove predictions with a score higher than the score_cutoff.
         if self.score_cutoff > 0 and self.score_cutoff < 1:
@@ -132,13 +139,13 @@ class chatsearcher:
             fit = predictions[i]["title"] in validskills
             predictions[i]["fit"] = fit
             if fit:
-                if self.strict > 0:
+                if self.strict >= 1:
                     penalty = -0.06
                     predictions[i]["penalty"] += penalty
                     predictions[i]["score"] += penalty
-                if self.strict > 1:
+                if self.strict >= 2:
                     validated.append(predictions[i])
-        return validated if (self.strict > 1 and validated) else predictions
+        return validated if (self.strict >= 2) else predictions
 
     def get_chatresponse(self, system, user, llmsize=0):
         if self.mistral_api_key:
@@ -281,7 +288,7 @@ class chatsearcher:
 
     def is_known_skill(self, skill):
         return (
-            self.skill_taxonomy == "ESCO" and skill["uri"] in self.validated_skill_uris
+            skill["uri"] in self.validated_skill_uris
         )
 
     def is_part_of_concept(self, skill):
@@ -307,6 +314,19 @@ class chatsearcher:
                 ]
                 if skill.metadata["broaderHierarchyConcepts"]
                 else [],
+                "score": score,
+                "penalty": 0,
+                "fit": True,
+            }
+        elif self.skill_taxonomy == "GRETA":
+            return {
+                "uri": skill.metadata["URI"],
+                "title": skill.metadata["Kompetenzfacette"],
+                "id": skill.metadata["ID"],
+                "aspect": skill.metadata["Kompetenzaspekt"],
+                "area": skill.metadata["Kompetenzbereich"],
+                "requirements": skill.metadata["Kompetenzanforderungen"],
+                "description": skill.metadata["Kompetenzbeschreibung"],
                 "score": score,
                 "penalty": 0,
                 "fit": True,

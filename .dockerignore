@@ -1,6 +1,6 @@
-data/preperation
 .git
 .dockerignore
 .env
 .python-version
 venv
+data/training/

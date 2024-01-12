@@ -7,24 +7,6 @@ volumes:
   pg_comp_ai_volume:
 
 services:
-  # Runs from the latest release
-  comp-ai-api:
-    build:
-      context: .
-      dockerfile: Dockerfile
-    image: pascalhuerten/comp-ai-api:latest
-    pull_policy: always
-    restart: always
-    volumes:
-      - comp_ai_volume:/data
-      - ./data/models:/models
-    env_file:
-      - .env
-    ports:
-      - "${HOST_PORT}:7680"
-    depends_on:
-      - postgres
-
   # Starts up a postgres database
   postgres:
     image: postgres
@@ -43,5 +25,23 @@ services:
       PGADMIN_DEFAULT_PASSWORD: ${PGADMIN_PASSWORD}
     ports:
       - "${PGADMIN_PORT}:80"
+    depends_on:
+      - postgres
+  
+  # Runs from the latest release
+  comp-ai-api:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    image: pascalhuerten/comp-ai-api:latest
+    pull_policy: always
+    restart: always
+    volumes:
+      - comp_ai_volume:/data
+      - ./data/models:/models
+    env_file:
+      - .env
+    ports:
+      - "${HOST_PORT}:7680"
     depends_on:
       - postgres

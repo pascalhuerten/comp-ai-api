@@ -1,11 +1,13 @@
 from flask import Flask
 from src.views.main import main_blueprint
 from src.views.skills import skills_blueprint
+from src.views.complevel import complevel_blueprint
 from src.setup import setup
 
 app = Flask(__name__)
 app.register_blueprint(main_blueprint)
 app.register_blueprint(skills_blueprint)
+app.register_blueprint(complevel_blueprint)
 
 # Initialize resources
 with app.app_context():

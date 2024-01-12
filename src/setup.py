@@ -31,6 +31,14 @@ def load_dkzdb(embedding):
     )
 
 
+def load_gretadb(embedding):
+    return Chroma(
+        client=PersistentClient("./data/stores/greta_vectorstore"),
+        embedding_function=embedding,
+        client_settings=Settings(anonymized_telemetry=False),
+    )
+
+
 def load_skillfit_model():
     return skillfit_predictor()
 
@@ -40,6 +48,7 @@ def setup():
     skilldbs = {
         "ESCO": load_escodb(embedding),
         "DKZ": load_dkzdb(embedding),
+        "GRETA": load_gretadb(embedding),
     }
     skillfit_model = load_skillfit_model()
 

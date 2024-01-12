@@ -28,6 +28,6 @@ class storage:
         # Connect to db
         if not os.getenv('POSTGRES_PASSWORD'):
             raise Exception("POSTGRES_PASSWORD not set")
-        conn = psycopg2.connect(f"postgres://postgres:{os.getenv('POSTGRES_PASSWORD')}@postgres/postgres?sslmode=disable")
+        conn = psycopg2.connect(f"postgres://postgres:{os.getenv('POSTGRES_PASSWORD')}@postgres:{os.getenv('POSTGRES_PORT')}/postgres?sslmode=disable")
         current_app.logger.info("Connected to database.")
         return conn

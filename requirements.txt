@@ -17,3 +17,4 @@ tensorflow==2.14.0
 psycopg2==2.9.9
 mistralai==0.0.8
 langchain==0.0.352
+nltk==3.8.1
