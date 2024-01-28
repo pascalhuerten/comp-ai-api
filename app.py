@@ -1,23 +1,25 @@
-from flask import Flask
-from src.views.main import main_blueprint
-from src.views.skills import skills_blueprint
-from src.views.complevel import complevel_blueprint
+import uvicorn
+from fastapi import FastAPI
+from src.routes.main_router import router as main_router
+from src.routes.skill_router import router as skill_router
+from src.routes.complevel_router import router as complevel_router
 from src.setup import setup
 
-app = Flask(__name__)
-app.register_blueprint(main_blueprint)
-app.register_blueprint(skills_blueprint)
-app.register_blueprint(complevel_blueprint)
+app = FastAPI()
 
 # Initialize resources
-with app.app_context():
-    embedding, skilldbs, skillfit_model, storage = setup()
+embedding, skilldbs, reranker, db = setup()
 
-# Store resources in app's config so they can be accessed in views
-app.config['EMBEDDING'] = embedding
-app.config['SKILLDBS'] = skilldbs
-app.config['SKILLFIT_MODEL'] = skillfit_model
-app.config['storage'] = storage
+# Store resources in app's state so they can be accessed in views
+app.state.EMBEDDING = embedding
+app.state.SKILLDBS = skilldbs
+app.state.RERANKER = reranker
+app.state.DB = db
+
+# Register routes
+app.include_router(main_router)
+app.include_router(skill_router)
+app.include_router(complevel_router)
 
 if __name__ == "__main__":
-    app.run(debug=True)
+    uvicorn.run(app, host="0.0.0.0", port=8000)

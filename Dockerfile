@@ -15,5 +15,5 @@ VOLUME ["/data"]
 # Make the host_port available to the world outside this container
 EXPOSE 7680
 
-# Run the Flask app when the container launches
-CMD flask run --host 0.0.0.0 --port 7680
+# Run the FastAPI app when the container launches
+CMD ["uvicorn", "app:app", "--host", "0.0.0.0", "--port", "7680"]
