@@ -77,12 +77,6 @@ class SkillRetrieverRequest(BaseModel):
 class LegacySkillRetrieverRequest(SkillRetrieverRequest):
     trusted_score: float = Field(default=0.2)
     skillfit_validation: bool = Field(default=False)
-    
-    @validator('rerank', always=True)
-    def set_rerank(cls, v, values):
-        if 'rerank' not in values and 'skillfit_validation' in values:
-            return values['skillfit_validation']
-        return v
 
 
 class SkillRetrieverResponse(BaseModel):
@@ -153,6 +147,9 @@ async def chatsearch(
     # set trusted_score and core_cutoff to 1- trusted_score and 1 - score_cutoff
     request.trusted_score = 1 - request.trusted_score
     request.score_cutoff = 1 - request.score_cutoff
+
+    if request.skillfit_validation:
+        request.rerank = True
 
     # Ensure that skill_taxonomy is one of the available taxonomies.
     available_taxonomies = skilldbs.keys()
