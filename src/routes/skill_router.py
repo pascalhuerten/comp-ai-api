@@ -74,6 +74,10 @@ class SkillRetrieverRequest(BaseModel):
         return v
 
 
+class LegacySkillRetrieverRequest(SkillRetrieverRequest):
+    trusted_score: float = Field(default=0.2)
+
+
 class SkillRetrieverResponse(BaseModel):
     searchterms: List[str]
     results: List[SkillResponse]
@@ -133,7 +137,7 @@ def get_skilldbs(req: Request):
 # In this version of the endpoint, the score is 1 - score, and 0 is the best score.
 @router.post("/chatsearch", response_model=SkillRetrieverResponse)
 async def chatsearch(
-    request: SkillRetrieverRequest,
+    request: LegacySkillRetrieverRequest,
     db=Depends(get_db),
     embedding=Depends(get_embedding),
     reranker=Depends(get_reranker),
