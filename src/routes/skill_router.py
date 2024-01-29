@@ -78,9 +78,9 @@ class LegacySkillRetrieverRequest(SkillRetrieverRequest):
     trusted_score: float = Field(default=0.2)
     skillfit_validation: bool = Field(default=False)
     
-    @validator('reranker', always=True)
-    def set_reranker(cls, v, values):
-        if 'reranker' not in values and 'skillfit_validation' in values:
+    @validator('rerank', always=True)
+    def set_rerank(cls, v, values):
+        if 'rerank' not in values and 'skillfit_validation' in values:
             return values['skillfit_validation']
         return v
 
