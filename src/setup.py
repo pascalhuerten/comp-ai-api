@@ -6,12 +6,20 @@ from FlagEmbedding import FlagReranker
 from .models.DB import DB
 import os
 
-def load_embedding():
-    return HuggingFaceInstructEmbeddings(
-        model_name="pascalhuerten/instructor-skillfit",
-        query_instruction="Represent the learning outcome for retrieving relevant skills: ",
-        embed_instruction="Represent the skill for retrieval: "
-    )
+
+def load_embedding_functions():
+    return {
+        "instructor-large": HuggingFaceInstructEmbeddings(
+            model_name="hkunlp/instructor-large",
+            query_instruction="",
+            embed_instruction="",
+        ),
+        "instructor-skillfit": HuggingFaceInstructEmbeddings(
+            model_name="pascalhuerten/instructor-skillfit",
+            query_instruction="Represent the learning outcome for retrieving relevant skills: ",
+            embed_instruction="Represent the skill for retrieval: ",
+        ),
+    }
 
 
 def load_escodb(embedding):
@@ -40,20 +48,23 @@ def load_gretadb(embedding):
         collection_metadata={"hnsw:space": "cosine"},
     )
 
+
 def load_reranker():
-    return FlagReranker('pascalhuerten/bge_reranker_skillfit', use_fp16=True) #use fp16 can speed up computing
+    return FlagReranker(
+        "pascalhuerten/bge_reranker_skillfit", use_fp16=True
+    )  # use fp16 can speed up computing
 
 
 def setup():
-    embedding = load_embedding()
+    embedding_functions = load_embedding_functions()
     skilldbs = {
-        "ESCO": load_escodb(embedding),
-        "DKZ": load_dkzdb(embedding),
-        "GRETA": load_gretadb(embedding),
+        "ESCO": load_escodb(embedding_functions["instructor-skillfit"]),
+        "DKZ": load_dkzdb(embedding_functions["instructor-skillfit"]),
+        "GRETA": load_gretadb(embedding_functions["instructor-skillfit"]),
     }
     reranker = load_reranker()
 
-    # db = None
-    db = DB()
+    db = None
+    # db = DB()
 
-    return embedding, skilldbs, reranker, db
+    return embedding_functions, skilldbs, reranker, db

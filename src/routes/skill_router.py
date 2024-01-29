@@ -111,8 +111,28 @@ class GetCourseSkillsResponse(BaseModel):
     course_skills: List[CourseSkill]
 
 
-class GetEmbeddingsRequest(BaseModel):
+class BaseEmbeddingRequest(BaseModel):
+    model: str = Field(
+        default="instructor-large",
+        pattern="^(instructor-large|instructor-skillfit)$",
+        description="The model field can only take the values 'instructor-large' or 'instructor-skillfit'",
+    )
+
+
+class GetEmbeddingsQueryRequest(BaseEmbeddingRequest):
+    query: str
+    query_instruction: str = Field(
+        default="Represent the question for retrieving supporting documents: ",
+        description="Instruction to use for embedding query.",
+    )
+
+
+class GetEmbeddingsDocumentsRequest(BaseEmbeddingRequest):
     docs: List[str]
+    embed_instruction: str = Field(
+        default="Represent the document for retrieval: ",
+        description="Instruction to use for embedding documents.",
+    )
 
 
 router = APIRouter()
@@ -122,8 +142,8 @@ def get_db(req: Request):
     return req.app.state.DB
 
 
-def get_embedding(req: Request):
-    return req.app.state.EMBEDDING
+def get_embedding_functions(req: Request):
+    return req.app.state.EMBEDDING_FUNCTIONS
 
 
 def get_reranker(req: Request):
@@ -140,7 +160,7 @@ def get_skilldbs(req: Request):
 async def chatsearch(
     request: LegacySkillRetrieverRequest,
     db=Depends(get_db),
-    embedding=Depends(get_embedding),
+    embedding_functions=Depends(get_embedding_functions),
     reranker=Depends(get_reranker),
     skilldbs=Depends(get_skilldbs),
 ):
@@ -159,8 +179,12 @@ async def chatsearch(
             detail=f'skill_taxonomy must be one of {", ".join(available_taxonomies)}',
         )
 
+    embedding_function = embedding_functions["instructor-skillfit"]
+    embedding_function.query_instruction = "Represent the learning outcome for retrieving relevant skills: ";
+    embedding_function.embed_instruction = "Represent the skill for retrieval: ";
+
     predictor = SkillRetriever(
-        embedding,
+        embedding_function,
         reranker,
         skilldbs,
         request,
@@ -193,7 +217,7 @@ async def chatsearch(
 async def chatsearch_v2(
     request: SkillRetrieverRequest,
     db=Depends(get_db),
-    embedding=Depends(get_embedding),
+    embedding_functions=Depends(get_embedding_functions),
     reranker=Depends(get_reranker),
     skilldbs=Depends(get_skilldbs),
 ):
@@ -205,8 +229,12 @@ async def chatsearch_v2(
             detail=f'skill_taxonomy must be one of {", ".join(available_taxonomies)}',
         )
 
+    embedding_function = embedding_functions["instructor-skillfit"]
+    embedding_function.query_instruction = "Represent the learning outcome for retrieving relevant skills: ";
+    embedding_function.embed_instruction = "Represent the skill for retrieval: ";
+
     predictor = SkillRetriever(
-        embedding,
+        embedding_function,
         reranker,
         skilldbs,
         request,
@@ -258,6 +286,21 @@ def get_course_skills(db=Depends(get_db)):
     )
 
 
-@router.post("/getEmbeddings")
-def get_embeddings(request: GetEmbeddingsRequest, embedding=Depends(get_embedding)):
-    return embedding.embed_documents(request.docs)
+@router.post("/embeddings/query", response_model=List[float])
+def embed_query(
+    request: GetEmbeddingsQueryRequest,
+    embedding_functions=Depends(get_embedding_functions),
+):
+    embedding_function = embedding_functions[request.model]
+    embedding_function.query_instruction = request.query_instruction
+    return embedding_function.embed_query(request.query)
+
+
+@router.post("/embeddings/documents", response_model=List[List[float]])
+def embed_documents(
+    request: GetEmbeddingsDocumentsRequest,
+    embedding_functions=Depends(get_embedding_functions),
+):
+    embedding_function = embedding_functions[request.model]
+    embedding_function.embed_instruction = request.embed_instruction
+    return embedding_function.embed_documents(request.docs)

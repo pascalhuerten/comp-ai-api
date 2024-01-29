@@ -8,10 +8,10 @@ from src.setup import setup
 app = FastAPI()
 
 # Initialize resources
-embedding, skilldbs, reranker, db = setup()
+embedding_functions, skilldbs, reranker, db = setup()
 
 # Store resources in app's state so they can be accessed in views
-app.state.EMBEDDING = embedding
+app.state.EMBEDDING_FUNCTIONS = embedding_functions
 app.state.SKILLDBS = skilldbs
 app.state.RERANKER = reranker
 app.state.DB = db
