@@ -64,7 +64,7 @@ def setup():
     }
     reranker = load_reranker()
 
-    db = None
-    # db = DB()
+    # db = None
+    db = DB()
 
     return embedding_functions, skilldbs, reranker, db
