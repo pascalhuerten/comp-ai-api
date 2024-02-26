@@ -43,7 +43,7 @@ class ComplevelPredictor():
         model = self.deserialize()
         prediction = model.predict([text]).tolist()[0]
         probability = model.predict_proba([text]).tolist()[0]
-        labels = ['A', 'B', 'C']
+        labels = ['A', 'B', 'C', 'D']
         level = prediction[0]
         prediction_proba = probability[labels.index(level)]
         return {'level': level, 'target_probability': prediction_proba, 'class_probability': probability}
